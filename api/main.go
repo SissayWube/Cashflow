@@ -1,0 +1,40 @@
+package main
+
+import (
+	"database/sql"
+	"log"
+
+	"github.com/streadway/amqp"
+)
+
+var db *sql.DB
+var mqConn *amqp.Connection
+var mqChan *amqp.Channel
+
+func main() {
+	var err error
+	db, err = ConnectDB()
+	if err != nil {
+		log.Fatalf("Failed to connect to DB: %v", err)
+	}
+
+	// run migrations
+	if err := MigrateDB(db); err != nil {
+		log.Fatalf("Failed to run migrations: %v", err)
+	}
+
+	if err = ConnectMQ(); err != nil {
+		log.Fatalf("Failed to connect to MQ: %v", err)
+	}
+	
+	defer mqConn.Close()
+	defer mqChan.Close()
+
+	// setup the Echo server
+	e := setupAPI()
+
+	log.Println("API started on :8080")
+
+	// start the server
+	e.Logger.Fatal(e.Start(":8080"))
+}

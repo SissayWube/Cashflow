@@ -7,11 +7,23 @@ import (
 	"os"
 	"time"
 
+	"testing/fstest"
+
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
+	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
 
 // ConnectDB establishes a connection to the PostgreSQL database
 func ConnectDB() (*sql.DB, error) {
+
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found.")
+		return nil, err
+	}
+
 	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=5432 sslmode=disable",
 		os.Getenv("DB_HOST"), os.Getenv("DB_USER"), os.Getenv("DB_PASSWORD"), os.Getenv("DB_NAME"))
 
@@ -22,9 +34,9 @@ func ConnectDB() (*sql.DB, error) {
 	}
 
 	// Configure connection pool
-	db.SetMaxOpenConns(25)                 
-	db.SetMaxIdleConns(25)                 
-	db.SetConnMaxLifetime(5 * time.Minute) 
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(25)
+	db.SetConnMaxLifetime(5 * time.Minute)
 
 	if err = db.Ping(); err != nil {
 		log.Printf("DB ping error: %v", err)
@@ -66,4 +78,52 @@ func GetPayment(db *sql.DB, id int) (*Payment, error) {
 		return nil, err
 	}
 	return p, nil
+}
+
+// MigrateDB runs the database migrations for the payments table
+func MigrateDB(db *sql.DB) error {
+	migrations := fstest.MapFS{
+		"0001_create_payments.up.sql": &fstest.MapFile{
+			Data: []byte(`
+				CREATE TABLE payments (
+					id SERIAL PRIMARY KEY,
+					amount DECIMAL(10, 2) NOT NULL CHECK (amount > 0),
+					currency VARCHAR(3) NOT NULL CHECK (currency IN ('ETB', 'USD')),
+					reference VARCHAR(255) NOT NULL UNIQUE,
+					status VARCHAR(20) NOT NULL DEFAULT 'PENDING'
+						CHECK (status IN ('PENDING', 'SUCCESS', 'FAILED')),
+					created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+				);
+			`),
+		},
+		"0001_create_payments.down.sql": &fstest.MapFile{
+			Data: []byte(`-- no-op rollback`),
+		},
+	}
+
+	source, err := iofs.New(migrations, ".")
+	if err != nil {
+		return err
+	}
+
+	driver, err := postgres.WithInstance(db, &postgres.Config{})
+	if err != nil {
+		return err
+	}
+
+	m, err := migrate.NewWithInstance(
+		"iofs",
+		source,
+		"postgres",
+		driver,
+	)
+	if err != nil {
+		return err
+	}
+
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		return err
+	}
+
+	return nil
 }
