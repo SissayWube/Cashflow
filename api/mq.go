@@ -5,19 +5,16 @@ import (
 	"log"
 	"os"
 
-	"github.com/joho/godotenv"
 	"github.com/streadway/amqp"
 )
 
 var paymentQueue string
 
 func ConnectMQ() error {
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found.")
-		return err
-	}
-
 	paymentQueue = os.Getenv("MQ_QUEUE")
+	if paymentQueue == "" {
+		return fmt.Errorf("MQ_QUEUE environment variable not set")
+	}
 
 	var err error
 	mqConn, err = amqp.Dial(fmt.Sprintf("amqp://%s:%s@%s:5672/",
@@ -31,7 +28,7 @@ func ConnectMQ() error {
 		return fmt.Errorf("MQ channel error: %v", err)
 	}
 
-	_, err = mqChan.QueueDeclare(os.Getenv("MQ_QUEUE"), true, false, false, false, nil)
+	_, err = mqChan.QueueDeclare(paymentQueue, true, false, false, false, nil)
 	if err != nil {
 		return fmt.Errorf("Queue declare error: %v", err)
 	}

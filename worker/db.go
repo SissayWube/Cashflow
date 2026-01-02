@@ -8,17 +8,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
 
 // ConnectDB establishes a connection to the PostgreSQL database
 func ConnectDB() (*sql.DB, error) {
-
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found.")
-		return nil, err
-	}
 
 	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=5432 sslmode=disable",
 		os.Getenv("DB_HOST"), os.Getenv("DB_USER"), os.Getenv("DB_PASSWORD"), os.Getenv("DB_NAME"))
@@ -45,7 +39,7 @@ func ConnectDB() (*sql.DB, error) {
 
 // UpdatePayment updates the payment status in the database
 func UpdatePayment(db *sql.DB, paymentID int) error {
-	var payment_status string
+
 	tx, err := db.Begin()
 	if err != nil {
 		log.Printf("DB begin error for payment %d: %v", paymentID, err)
@@ -66,25 +60,27 @@ func UpdatePayment(db *sql.DB, paymentID int) error {
 
 	if status != "PENDING" {
 		log.Printf("Skipping payment %d (already %s)", paymentID, status)
-		if err = tx.Commit(); err != nil {
-			log.Printf("Commit error for payment %d: %v", paymentID, err)
-		}
-		return err
+		return tx.Commit()
 	}
 
-	// Simulate processing
+	// Simulate processing (random success/fail)
 	time.Sleep(2 * time.Second)
-
-	payment_status = "SUCCESS"
+	newStatus := "SUCCESS"
 	if rand.Float32() < 0.3 {
-		payment_status = "FAILED"
+		newStatus = "FAILED"
 	}
 
-	_, err = tx.Exec(`UPDATE payments SET status = $1 WHERE id = $2`, payment_status, paymentID)
+	_, err = tx.Exec(`UPDATE payments SET status = $1 WHERE id = $2`, newStatus, paymentID)
 	if err != nil {
 		log.Printf("Update error for payment %d: %v", paymentID, err)
 		return err
 	}
 
-	return tx.Commit()
+	if err = tx.Commit(); err != nil {
+		log.Printf("Commit error for payment %d: %v", paymentID, err)
+		return err
+	}
+
+	log.Printf("Processed payment %d: %s", paymentID, newStatus)
+	return nil
 }

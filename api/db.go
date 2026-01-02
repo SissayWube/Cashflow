@@ -12,18 +12,11 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
-	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
 
 // ConnectDB establishes a connection to the PostgreSQL database
 func ConnectDB() (*sql.DB, error) {
-
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found.")
-		return nil, err
-	}
-
 	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=5432 sslmode=disable",
 		os.Getenv("DB_HOST"), os.Getenv("DB_USER"), os.Getenv("DB_PASSWORD"), os.Getenv("DB_NAME"))
 
@@ -56,6 +49,8 @@ func InsertPayment(db *sql.DB, p *Payment) (int, error) {
 	defer tx.Rollback()
 
 	var id int
+	// Insert the payment record
+	// Status defaults to 'PENDING'
 	err = tx.QueryRow(`INSERT INTO payments (amount, currency, reference) VALUES ($1, $2, $3) RETURNING id`,
 		p.Amount, p.Currency, p.Reference).Scan(&id)
 	if err != nil {
@@ -83,21 +78,20 @@ func GetPayment(db *sql.DB, id int) (*Payment, error) {
 // MigrateDB runs the database migrations for the payments table
 func MigrateDB(db *sql.DB) error {
 	migrations := fstest.MapFS{
-		"0001_create_payments.up.sql": &fstest.MapFile{
+		"0001_create_payments_table.up.sql": &fstest.MapFile{
 			Data: []byte(`
-				CREATE TABLE payments (
+				CREATE TABLE IF NOT EXISTS payments (
 					id SERIAL PRIMARY KEY,
 					amount DECIMAL(10, 2) NOT NULL CHECK (amount > 0),
 					currency VARCHAR(3) NOT NULL CHECK (currency IN ('ETB', 'USD')),
 					reference VARCHAR(255) NOT NULL UNIQUE,
-					status VARCHAR(20) NOT NULL DEFAULT 'PENDING'
-						CHECK (status IN ('PENDING', 'SUCCESS', 'FAILED')),
+					status VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'SUCCESS', 'FAILED')),
 					created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 				);
 			`),
 		},
-		"0001_create_payments.down.sql": &fstest.MapFile{
-			Data: []byte(`-- no-op rollback`),
+		"0001_create_payments_table.down.sql": &fstest.MapFile{
+			Data: []byte(`DROP TABLE IF EXISTS payments;`),
 		},
 	}
 
@@ -125,5 +119,6 @@ func MigrateDB(db *sql.DB) error {
 		return err
 	}
 
+	log.Println("Migrations applied successfully")
 	return nil
 }
