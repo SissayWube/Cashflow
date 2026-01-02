@@ -5,6 +5,7 @@ import (
 	"log"
 	"strconv"
 
+	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"github.com/streadway/amqp"
 )
@@ -15,17 +16,24 @@ var mqChan *amqp.Channel
 var msgs <-chan amqp.Delivery
 
 func main() {
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found; using system env vars")
+	}
+
 	// Connect to DB
 	var err error
 	db, err = ConnectDB()
 	if err != nil {
 		log.Fatalf("Failed to connect to DB: %v", err)
 	}
+	defer db.Close()
 
 	// Connect to MQ
 	if err = ConnectMQ(); err != nil {
 		log.Fatalf("Failed to connect to MQ: %v", err)
 	}
+	defer mqConn.Close()
+	defer mqChan.Close()
 
 	log.Println("Worker started, waiting for messages...")
 	for d := range msgs {
@@ -42,11 +50,10 @@ func processPayment(body []byte) {
 		return
 	}
 
-	 err = UpdatePayment(db, id)
+	err = UpdatePayment(db, id)
 	if err != nil {
 		log.Printf("Error updating payment %d: %v", id, err)
 		return
 	}
-
 
 }
