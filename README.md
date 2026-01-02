@@ -7,7 +7,7 @@ Overview
 This project implements a minimal but realistic payment gateway with the following key properties:
 
 - Asynchronous processing via RabbitMQ
-- Idempotent payment processing – a payment is processed exactly once, even under message redelivery, retries, or concurrent workers
+- Idempotent payment processing a payment is processed exactly once, even under message redelivery, retries, or concurrent workers
 - PostgreSQL as source of truth with row-level locking and transactions
 - Clean separation of API and worker services
 - Containerized with Docker Compose
