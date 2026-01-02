@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"log"
 
+	"github.com/joho/godotenv"
 	"github.com/streadway/amqp"
 )
 
@@ -12,11 +13,19 @@ var mqConn *amqp.Connection
 var mqChan *amqp.Channel
 
 func main() {
+	// load environment variables
+	if err := godotenv.Load(); err != nil {
+		log.Fatalf("Error loading .env file: %v", err)
+	}
+
 	var err error
+
+	// connect
 	db, err = ConnectDB()
 	if err != nil {
 		log.Fatalf("Failed to connect to DB: %v", err)
 	}
+	defer db.Close()
 
 	// run migrations
 	if err := MigrateDB(db); err != nil {
@@ -26,17 +35,13 @@ func main() {
 	if err = ConnectMQ(); err != nil {
 		log.Fatalf("Failed to connect to MQ: %v", err)
 	}
-	
+
 	defer mqConn.Close()
 	defer mqChan.Close()
 
 	// setup the Echo server
 	e := setupAPI()
-
 	log.Println("API started on :8080")
-
 	// start the server
 	e.Logger.Fatal(e.Start(":8080"))
 }
-
-
