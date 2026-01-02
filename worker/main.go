@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"log"
+	"os"
 	"strconv"
 
 	"github.com/joho/godotenv"
@@ -16,8 +17,16 @@ var mqChan *amqp.Channel
 var msgs <-chan amqp.Delivery
 
 func main() {
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found; using system env vars")
+	// Only load .env in local development (default to dev if APP_ENV not set)
+	appEnv := os.Getenv("APP_ENV")
+	if appEnv == "" || appEnv == "development" {
+		if err := godotenv.Load(); err != nil {
+			log.Printf("Warning: Could not load .env file: %v (using system env vars)", err)
+		} else {
+			log.Println(".env file loaded for local development")
+		}
+	} else {
+		log.Println("Production mode: using container-injected environment variables")
 	}
 
 	// Connect to DB
